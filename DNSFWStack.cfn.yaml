@@ -1,0 +1,158 @@
+Parameters:
+  ParamS3ArtifactBucket:
+    Type: String
+    Description: Please enter the bucketname <String> you created that contain the zipfile of your lambda and layer
+  ParamS3RpzBucket:
+    Type: String
+    Description: Please enter the bucketname <String> for the s3 bucket that will be used to temporarily store the list of domains that need to be filtered
+  ParamFirewallDomainListName:
+    Type: String
+    Description: Please enter the Firewall Domain List Name <String> that will be created and kept up-to-date
+Resources:
+  LambdaRoleForLambdaRpz:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Description: Lambda-Role
+      RoleName: LambdaRoleForLambdaRpz
+  s3RpzBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName:
+        Ref: ParamS3RpzBucket
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 1
+            Id: 1 day expiration rule
+            Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  Route53ResolverDomainList:
+    Type: AWS::Route53Resolver::FirewallDomainList
+    Properties:
+      Name:
+        Ref: ParamFirewallDomainListName
+  AxiosLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      Content:
+        S3Bucket:
+          Ref: ParamS3ArtifactBucket
+        S3Key: node-axios-layer.zip
+      LayerName: node-axios-layer
+  LambdaRpz:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: ParamS3ArtifactBucket
+        S3Key: LambdaRpz.js.zip
+      Role:
+        Fn::GetAtt:
+          - LambdaRoleForLambdaRpz
+          - Arn
+      Environment:
+        Variables:
+          s3Prefix:
+            Ref: ParamS3RpzBucket
+          FirewallDomainListId:
+            Fn::GetAtt:
+              - Route53ResolverDomainList
+              - Id
+          Region:
+            Ref: AWS::Region
+      FunctionName: LambdaRpz
+      Handler: LambdaRpz.handler
+      Layers:
+        - Ref: AxiosLayer
+      Runtime: nodejs14.x
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/LambdaRpz
+      RetentionInDays: 30
+  RpzSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Scheduled rules to trigger lambdarpz to update dnsfirewall
+      Name: RpzSchedule
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - LambdaRpz
+              - Arn
+          Id: LambdaRpz
+          Input: '{"eventDetail":"Scheduled event"}'
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+          - LambdaRpz
+          - Arn
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - RpzSchedule
+          - Arn
+  Policylambda:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:aws:logs:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :*
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource:
+              Fn::Join:
+                - ""
+                - - Fn::GetAtt:
+                      - s3RpzBucket
+                      - Arn
+                  - /*
+          - Effect: Allow
+            Action:
+              - route53resolver:ImportFirewallDomains
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:aws:route53resolver:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :firewall-domain-list/
+                  - Fn::GetAtt:
+                      - Route53ResolverDomainList
+                      - Id
+      PolicyName: LambdaPolicyforRpzAutomation
+      Roles:
+        - Ref: LambdaRoleForLambdaRpz
+
