@@ -15,7 +15,7 @@ To go further with the solution and for more flexibility : https://github.com/aw
 - 1 IAM Role associated to the lambda
 - 1 IAM Policy associated with the lambda's role
 - 1 S3 bucket that will be used in order to "bulk import" the domains into route53dns firewall
-- 1 route53resolver domains list that will be kept up to date by the automation process
+- 1 Route53resolver domains list that will be kept up to date by the automation process
 
 ![Cloudformation](img/Dnsfw-cf.png)
 
@@ -41,7 +41,7 @@ With the cli : ```aws s3 rm s3://<DNSFW-bucket-name> --recursive && aws --region
 
 **Note :**
 - The retention policy on the "ParamS3RpzBucket" that will be created is set to 24h
-- The log group of the lambda is set to retains log for a duration of 1 month
+- The log group of the lambda is set to retain log for a duration of 1 month
 
 ## Security
 
