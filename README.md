@@ -42,6 +42,7 @@ With the cli : ```aws s3 rm s3://<DNSFW-bucket-name> --recursive && aws --region
 **Note :**
 - The retention policy on the "ParamS3RpzBucket" that will be created is set to 24h
 - The log group of the lambda is set to retain log for a duration of 1 month
+- You can monitor the lambda executions from the cloudwatch logs and the lambda "monitor" pannel
 
 ## Security
 
